@@ -1,94 +1,74 @@
-import streamlit as st
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
-import os
+import streamlit as st
+from PIL import Image
 
-st.set_page_config(page_title="Document Genie", layout="wide")
+# Set up Streamlit page configuration
+st.set_page_config(page_title="Pega Tutor", page_icon="🎓", layout="wide")
 
-st.markdown("""
-## Document Genie: Get instant insights from your Documents
+# Load and display logo/image
+image = Image.open("pega.jpeg")
+col1, col2 = st.columns([1, 3])
+with col1:
+    st.image(image, width=250)  # Increased the width to 150
+with col2:
+    st.title("Pega Tutor Application")
+    st.write("An expert AI-powered tutor to help with your Pega-related questions.")
 
-This chatbot is built using the Retrieval-Augmented Generation (RAG) framework, leveraging Google's Generative AI model Gemini-PRO. It processes uploaded PDF documents by breaking them down into manageable chunks, creates a searchable vector store, and generates accurate answers to user queries. This advanced approach ensures high-quality, contextually relevant responses for an efficient and effective user experience.
+# Configure API key
+genai.configure(api_key="AIzaSyDhzLev5d_V46XA7KQrmg4u90M_g2Xq8Kc")
 
-### How It Works
+# System prompt for the generative model
+sys_prompt = """
+You are an experienced Tutor with 20 years of professional expertise in the Pega Customer decision hub and pega systems expert.
+Your role is to help students by answering their questions related to Pega in a very clear, simple, 
+and easy-to-understand manner. Provide detailed explanations and use relatable examples to help 
+illustrate your points effectively. If a student asks a question outside the scope of Pega, politely 
+decline and remind them to ask questions only related to Pega platform.
+"""
 
-Follow these simple steps to interact with the chatbot:
+# Initialize the generative model
+model = genai.GenerativeModel(model_name="models/gemini-1.5-flash", system_instruction=sys_prompt)
 
-1. **Enter Your API Key**: You'll need a Google API key for the chatbot to access Google's Generative AI models. Obtain your API key https://makersuite.google.com/app/apikey.
+# Initialize session state to store chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-2. **Upload Your Documents**: The system accepts multiple PDF files at once, analyzing the content to provide comprehensive insights.
+# Function to generate response
+def generate_response():
+    user_prompt = st.session_state.user_prompt
+    if user_prompt:
+        with st.spinner("Generating answer..."):
+            response = model.generate_content(user_prompt)
+            st.session_state.response_text = response.text
+            # Store user question and AI response in the chat history
+            question_snippet = user_prompt[:30]  # Get the first 30 characters of the question
+            st.session_state.chat_history.append((f"Q: {question_snippet}", user_prompt))
+            st.session_state.chat_history.append((f"A: {question_snippet}", st.session_state.response_text))
+    else:
+        st.session_state.response_text = "Please enter a query before pressing Enter."
 
-3. **Ask a Question**: After processing the documents, ask any question related to the content of your uploaded documents for a precise answer.
-""")
+# Input from the user using chat_input
+human_prompt = st.chat_input(" Message Pega ...")
 
+if human_prompt:
+    st.session_state.user_prompt = human_prompt
+    generate_response()
 
+# Display chat history with collapsible question/answer sections
+st.sidebar.title("Chat History")
+for idx, (label, message) in enumerate(st.session_state.chat_history):
+    if "Q:" in label:
+        with st.sidebar.expander(f"{label}"):
+            st.markdown(f"**{label}**: {message}")
+            # Find and display the corresponding answer
+            answer_label = f"A: {label[2:]}"  # Get corresponding answer snippet
+            answer_message = st.session_state.chat_history[idx + 1][1] if idx + 1 < len(st.session_state.chat_history) else ""
+            st.markdown(f"**{answer_label}**: {answer_message}")
 
-# This is the first API key input; no need to repeat it in the main function.
-api_key = st.text_input("Enter your Google API Key:", type="password", key="api_key_input")
+# Display the response
+if 'response_text' in st.session_state:
+    st.markdown("#### Tutor's Response:")
+    st.write(f"🧑‍🏫: {st.session_state.response_text}")
 
-def get_pdf_text(pdf_docs):
-    text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
-
-def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-    chunks = text_splitter.split_text(text)
-    return chunks
-
-def get_vector_store(text_chunks, api_key):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local("faiss_index")
-
-def get_conversational_chain():
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
-    provided context just say, "answer is not available in the context", don't provide the wrong answer\n\n
-    Context:\n {context}?\n
-    Question: \n{question}\n
-
-    Answer:
-    """
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3, google_api_key=api_key)
-    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-    return chain
-
-def user_input(user_question, api_key):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-    new_db = FAISS.load_local("faiss_index", embeddings)
-    docs = new_db.similarity_search(user_question)
-    chain = get_conversational_chain()
-    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
-    st.write("Reply: ", response["output_text"])
-
-def main():
-    st.header("AI clone chatbot💁")
-
-    user_question = st.text_input("Ask a Question from the PDF Files", key="user_question")
-
-    if user_question and api_key:  # Ensure API key and user question are provided
-        user_input(user_question, api_key)
-
-    with st.sidebar:
-        st.title("Menu:")
-        pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True, key="pdf_uploader")
-        if st.button("Submit & Process", key="process_button") and api_key:  # Check if API key is provided before processing
-            with st.spinner("Processing..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                get_vector_store(text_chunks, api_key)
-                st.success("Done")
-
-if __name__ == "__main__":
-    main()
+# Display footer or additional help text
+st.write("---")
