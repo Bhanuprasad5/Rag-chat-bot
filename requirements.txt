@@ -1,2 +1,4 @@
 streamlit
-
+langchain-chroma
+chroma
+genai
