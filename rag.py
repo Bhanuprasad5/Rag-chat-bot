@@ -7,12 +7,12 @@ st.set_page_config(page_title="Pega Tutor", page_icon="🎓", layout="wide")
 
 # Load and display logo/image
 #image = Image.open("pega.jpeg")
-col1, col2 = st.columns([1, 3])
-with col1:
-    st.image(image, width=250)  # Increased the width to 150
-with col2:
-    st.title("Pega Tutor Application")
-    st.write("An expert AI-powered tutor to help with your Pega-related questions.")
+# col1, col2 = st.columns([1, 3])
+# with col1:
+#     st.image(image, width=250)  # Increased the width to 150
+# with col2:
+#     st.title("Pega Tutor Application")
+#     st.write("An expert AI-powered tutor to help with your Pega-related questions.")
 
 # Configure API key
 genai.configure(api_key="AIzaSyDhzLev5d_V46XA7KQrmg4u90M_g2Xq8Kc")
