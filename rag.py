@@ -1,27 +1,28 @@
-# Import necessary libraries
 import streamlit as st
+from langchain_chroma import Chroma
+import genai
 
-# Set the title of the web app
-st.title("My First Streamlit App 🎉")
+# Initialize ChromaDB
+db = Chroma(collection_name="vector_database", embedding_function=embeddings_model, persist_directory="./chroma_db_")
 
-# Add a text input
-user_name = st.text_input("What's your name?", "")
+# Initialize GenAI
+f = open(r"C:\Users\chouk\OneDrive\Desktop\keys\key.txt")
+key = "google api"
+genai.configure(api_key=key)
+model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
-# Add a slider
-age = st.slider("How old are you?", 0, 100, 25)
+def generate_response(query):
+    docs_chroma = db.similarity_search_with_score(query, k=4)
+    context_text = "\n\n".join([doc.page_content for doc, _score in docs_chroma])
+    model.system_instruction = context_text
+    response = model.generate_content(query)
+    return response.text
 
-# Display output based on user input
-if user_name:
-    st.write(f"Hello, {user_name}! 🎈")
-    st.write(f"Wow, you're {age} years young! 🎂")
+# Streamlit App
+st.title("Document Q&A")
 
-# Add a button
-if st.button("Click Me!"):
-    st.success("You clicked the button! 🚀")
+user_query = st.text_input("Ask your question:")
 
-# Add an image (optional)
-st.image("https://placekitten.com/400/300", caption="Here's a cute kitten!")
-
-# Add a sidebar
-st.sidebar.title("Sidebar")
-st.sidebar.write("This is the sidebar where you can add extra content.")
+if user_query:
+    response = generate_response(user_query)
+    st.write(response)
